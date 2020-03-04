@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+  <link rel="stylesheet" href="css/normalize.css" />
+  <link rel="stylesheet" href="css/skeleton.css" />
+  <link rel="stylesheet" href="css/font-awesome.css" />
+  <link rel="stylesheet" href="css/open-sans.css" />
+  <link rel="stylesheet" href="css/index.css" />
+
+  <script src="js/cytoscape.min.js"></script>
+  <script src="js/cola.js"></script>
+  <script src="js/cytoscape-cola.js"></script>
+  <script src="js/jquery-3.1.1.min.js"></script>
+  <script src="js/index.js"></script>
+  <script src="js/cref.js"></script>
+
+  <title>DependDeHell</title>
+</head>
+
+<body>
+  <h1>DOFH - Dependency Overload from Hell</h1>
+
+  <div id="cy" class="main">
+  </div>
+
+  <div class="tools">
+
+    <h2>Data</h2>
+      <label for="uploadButton" class="u-pull-left" title="Upload CREF file">Upload CREF file</label>
+      <div class="u-cf"></div>
+      <input id="uploadButton" type="file"></input>
+
+    <h2>Layout</h2>
+
+    <label for="layout" class="u-pull-left" title="Change layout">Active layout</label>
+    <div class="u-cf"></div>
+    <select id="layout">
+      <option value="cola">Force-directed</option>
+      <option value="concentricCentrality">Concentric by centrality</option>
+      <option value="concentricHierarchyCentrality" selected>Hierarchy by centrality</option>
+      <option value="custom">Custom</option>
+    </select>
+    <i id="redo-layout" class="fa fa-refresh action-icon" title="Redo layout"></i>
+
+  </div>
+
+</body>
+
+</html>
