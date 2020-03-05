@@ -3,7 +3,11 @@ node {
 }
 
 edge {
-  opacity: 0.8;
+    line-color: #f00;
+    curve-style: bezier;
+    overlay-padding: 3px;
+	target-arrow-color: #0f0;
+    target-arrow-shape: triangle;
 }
 
 node.highlighted {
