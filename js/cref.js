@@ -1,15 +1,18 @@
 function getModule(objectFile) {
 	if (objectFile.startsWith("/lib") || objectFile.startsWith("/usr/lib")) {
+		console.log("getModule: " + objectFile + " -> System");
 		return "System";
 	}
 		
 	lastOpeningBracketIndex = objectFile.lastIndexOf("(");
 	lastSlashIndex = objectFile.lastIndexOf("/");
-	module = objectFile.substring(lastSlashIndex + 1, lastOpeningBracketIndex);
-
-	if (module.startsWith("libxml") || module.startsWith("libxslt")) {
-		return "libxml";
+	if (-1 == lastOpeningBracketIndex) {
+		module = objectFile.substring(lastSlashIndex + 1);
+	} else {
+		module = objectFile.substring(lastSlashIndex + 1, lastOpeningBracketIndex);
 	}
+
+	console.log("getModule: " + objectFile + " -> " + module);
 
 	return module;
 }
@@ -17,20 +20,30 @@ function getModule(objectFile) {
 function getFileName(objectFile) {
 	lastOpeningBracketIndex = objectFile.lastIndexOf("(");
 	lastClosingBracketIndex = objectFile.lastIndexOf(")");
-	fileName = objectFile.substring(lastOpeningBracketIndex + 1, lastClosingBracketIndex);
+
+	if ((-1 == lastOpeningBracketIndex) || (-1 == lastClosingBracketIndex)) {
+		// probably a shared object
+		fileName = objectFile.substring(objectFile.lastIndexOf("/") + 1);
+	} else {
+		fileName = objectFile.substring(lastOpeningBracketIndex + 1, lastClosingBracketIndex);
+	}
+	console.log("getFileName: " + objectFile + " -> " + fileName);
 	return fileName;
 }
 
-function getNode(objectFile) {
-	const blackboxLibs = ["System", "libxml", "libxslt"];
-	module = getModule(objectFile);
-	fileName = getFileName(objectFile);
-	blackboxLibs.forEach((lib) => {
-		if (module.startsWith(lib)) return module + "/" + module;
-	});
-		
-	return module + "/" + fileName
-}
+//function getNode(objectFile) {
+//	const blackboxLibs = ["System", "libxml", "libxslt"];
+//	module = getModule(objectFile);
+//	fileName = getFileName(objectFile);
+//	node = module + "/" + fileName;
+//	blackboxLibs.forEach((lib) => {
+//		if (module.startsWith(lib)) {
+//			node = lib + "/" + lib;
+//		}
+//	});
+//		
+//	return node;
+//}
 
 function parseCref(crefText) {
 	var modules = {};
@@ -41,7 +54,7 @@ function parseCref(crefText) {
 	var nodesCount = 0;
 	var lastSymbol;
 	var lastModule;
-	var lastNode;
+	var lastFile;
 	
 	console.log("parsing cref file");
 	const crefLines = crefText.split(/\r\n|\n/);
@@ -64,7 +77,7 @@ function parseCref(crefText) {
 				// where a symbol is located
 				lastSymbol = words[0];
 				lastModule = getModule(words[1]);
-				lastNode = getNode(words[1]);
+				lastFile = getFileName(words[1]);
 			} else if (words.length == 1 && words[0] != "") {
 				crefsFound++;
 				// where from a symbol is referred to
@@ -75,36 +88,35 @@ function parseCref(crefText) {
 					console.log("Added module " + lastModule);
 				}
 					
-				if (!modules[lastModule].hasOwnProperty(lastNode)) {
-					modules[lastModule][lastNode] = {};
-					console.log("Added node " + lastNode);
+				if (!modules[lastModule].hasOwnProperty(lastFile)) {
+					modules[lastModule][lastFile] = {};
+					console.log("Added file " + lastFile);
 					nodesCount++;
 				}
 
 				currentModule = getModule(words[0]);
-				currentNode = getNode(words[0]);
+				currentFile = getFileName(words[0]);
 
 				if (!modules.hasOwnProperty(currentModule)) {
 					modules[currentModule] = {};
 					console.log("Added module " + currentModule);
 				}
 
-				if (!modules[currentModule].hasOwnProperty(currentNode)) {
-					modules[currentModule][currentNode] = {};
-					console.log("Added node " + currentNode);
+				if (!modules[currentModule].hasOwnProperty(currentFile)) {
+					modules[currentModule][currentFile] = {};
+					console.log("Added file " + currentFile);
 					nodesCount++;
 				}
 
 				// dependencies[user][provider][symbol]
-				var user = currentNode;
-				var provider = lastNode;
-				if (!dependencies.hasOwnProperty(user)) {
-					dependencies[user] = {};
+				var user = { module: currentModule, file: currentFile };
+				var provider = { module: lastModule, file: lastFile };
+				if (user != provider) {
+					if (!dependencies.hasOwnProperty(lastSymbol)) {
+						dependencies[lastSymbol] = [];
+					}
+					dependencies[lastSymbol].push({user: user, provider: provider});
 				}
-				if (!dependencies[user].hasOwnProperty(provider)) {
-					dependencies[user][provider] = [];
-				}
-				dependencies[user][provider].push(lastSymbol);
 
 			} else {
 				console.log("Empty line! Yay!");
@@ -125,24 +137,35 @@ function updateGraph(modules, dependencies) {
 	// start with a clean sheat
 	cy.elements().remove();
 
-	for (let [module, nodes] of Object.entries(modules)) {
+	for (let [module, files] of Object.entries(modules)) {
 		console.log("Adding module " + module);
 		cy.add({group: 'nodes', data: { id: module }})
 
-		for (let [node] of Object.entries(nodes)) {
-			console.log("Adding node " + node);
-			cy.add({group: 'nodes', data: { id: node, parent: module }}); 
+		for (let [file] of Object.entries(files)) {
+			if (file !== "") {
+				console.log("Adding node " + module + "/" + file);
+				cy.add({group: 'nodes', data: { id: module + "/" + file, parent: module }}); 
+			}
 		}
 	}
 
-	for (let [user, providers] of Object.entries(dependencies)) {
-		for (let [provider, symbols] of Object.entries(providers)) {
-			symbols.forEach(symbol => {
-				console.log("Adding dependency of " + user + " from " + provider + " by " + symbol);
-				cy.add({group: 'edges', data :{ name:symbol, source: user, target: provider}}); 
-			});
-		}
+	for (let [symbol, dependency] of Object.entries(dependencies)) {
+		dependency.forEach(function (dep) {
+			if (dep.user.file !== "") {
+				var source = dep.user.module + "/" + dep.user.file;
+			} else {
+				var source = dep.user.module;
+			}
 
+			if (dep.provider.file !== "") {
+				var target = dep.provider.module + "/" + dep.provider.file;
+			} else {
+				var target = dep.provider.module;
+			}
+			
+			console.log("Adding dependency of " + source + " from " + target + " by " + symbol);				
+			cy.add({group: 'edges', data :{ name:symbol, source: source, target: target}}); 
+		});
 	}
 }
 
